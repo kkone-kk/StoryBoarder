@@ -98,7 +98,7 @@ export const generateImageFromPrompt = async (promptText: string, referenceImage
   // 2. 准备请求内容：默认是 [文字]
   let requestParts: any[] = [textPart];
 
-  // 3. 如果有参考图，尝试把它加进去 (保留你的逻辑)
+  // 3. 如果有参考图，尝试把它加进去
   if (referenceImageBase64) {
       const matches = referenceImageBase64.match(/^data:(.+);base64,(.+)$/);
       if (matches) {
@@ -114,11 +114,10 @@ export const generateImageFromPrompt = async (promptText: string, referenceImage
   // 定义一个通用的发送请求函数
   const callGenAI = async (parts: any[]) => {
       const response = await ai.models.generateContent({
-        model: 'imagen-3.0-generate-001', // 改成了专门画画的模型
-        contents: { parts: parts },
-        config: {
-          responseMimeType: 'image/jpeg' 
-        }
+        model: 'imagen-3.0-generate-001', 
+        contents: { parts: parts }
+        // ⚠️ 删除了这里的 config: { responseMimeType... } 
+        // 因为就是这一行导致了 'INVALID_ARGUMENT' 报错
       });
       return response;
   };
