@@ -90,49 +90,67 @@ export const analyzeCharacterFromImage = async (base64Image: string): Promise<st
 };
 
 export const generateImageFromPrompt = async (promptText: string, referenceImageBase64?: string): Promise<string> => {
-  try {
-    const ai = getClient();
-    
-    const parts: any[] = [];
+  const ai = getClient();
+  
+  // 1. 准备基础的文字提示词
+  const textPart = { text: promptText };
+  
+  // 2. 准备请求内容：默认是 [文字]
+  let requestParts: any[] = [textPart];
 
-    // Add reference image if available
-    if (referenceImageBase64) {
-        const matches = referenceImageBase64.match(/^data:(.+);base64,(.+)$/);
-        if (matches) {
-             parts.push({
-                inlineData: {
-                    mimeType: matches[1],
-                    data: matches[2]
-                }
-            });
-        }
-    }
-
-    // Add text prompt
-    parts.push({ text: promptText });
-    
-    // Using gemini-1.5-flash-image (Nano Banana) as requested for non-paid implementation
-    const response = await ai.models.generateContent({
-      model: 'gemini-1.5-flash-image',
-      contents: {
-        parts: parts
-      },
-      config: {
-        imageConfig: {
-            aspectRatio: "1:1" 
-        }
+  // 3. 如果有参考图，尝试把它加进去 (保留你的逻辑)
+  if (referenceImageBase64) {
+      const matches = referenceImageBase64.match(/^data:(.+);base64,(.+)$/);
+      if (matches) {
+           requestParts.unshift({ 
+              inlineData: {
+                  mimeType: matches[1],
+                  data: matches[2]
+              }
+          });
       }
-    });
+  }
 
+  // 定义一个通用的发送请求函数
+  const callGenAI = async (parts: any[]) => {
+      const response = await ai.models.generateContent({
+        model: 'imagen-3.0-generate-001', // 改成了专门画画的模型
+        contents: { parts: parts },
+        config: {
+          responseMimeType: 'image/jpeg' 
+        }
+      });
+      return response;
+  };
+
+  try {
+    // 【尝试 A】：发送 (参考图 + 文字)
+    const response = await callGenAI(requestParts);
+    
     for (const part of response.candidates?.[0]?.content?.parts || []) {
       if (part.inlineData) {
-        return `data:image/png;base64,${part.inlineData.data}`;
+        return `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`;
       }
     }
+    throw new Error("No image in response");
 
-    throw new Error("No image generated.");
   } catch (error: any) {
-    console.error("Gemini Image Gen Error:", error);
-    throw new Error("Failed to generate image.");
+    // 【尝试 B (自动保底)】：报错则自动降级为纯文字生成
+    if (referenceImageBase64) {
+        console.warn("参考图生成失败，自动降级为纯文字生成...", error.message);
+        try {
+            const retryResponse = await callGenAI([textPart]); 
+            for (const part of retryResponse.candidates?.[0]?.content?.parts || []) {
+                if (part.inlineData) {
+                    return `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`;
+                }
+            }
+        } catch (retryError) {
+            console.error("纯文字重试也失败:", retryError);
+            throw retryError;
+        }
+    }
+    console.error("Final Image Gen Error:", error);
+    throw error;
   }
 };
