@@ -1,5 +1,5 @@
 {
-  "name": "storyboarder-ai_v6_global",
+  "name": "storyboarder-ai_v7_global_data-&-insight",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -13,7 +13,8 @@
     "react": "^19.2.0",
     "@google/genai": "^1.30.0",
     "lucide-react": "^0.554.0",
-    "@supabase/supabase-js": "2.39.7"
+    "@supabase/supabase-js": "2.39.7",
+    "posthog-js": "1.160.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

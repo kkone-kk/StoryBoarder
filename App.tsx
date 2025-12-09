@@ -26,6 +26,7 @@ import Auth from './Auth';
 import { UserMenu } from './components/UserMenu';
 import { Gallery } from './components/Gallery';
 import { StepResult } from './components/StepResult';
+import posthog from 'posthog-js';
 
 // --- Components ---
 
@@ -95,16 +96,21 @@ export default function App() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setCheckingSession(false);
+      if (session?.user) {
+        posthog.identify(session.user.id, { email: session.user.email });
+      }
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      if (_event === 'SIGNED_IN') {
+      if (_event === 'SIGNED_IN' && session?.user) {
+        posthog.identify(session.user.id, { email: session.user.email });
         // We let the useEffect below handle the redirect based on returnTo
       }
       if (_event === 'SIGNED_OUT') {
+        posthog.reset();
         setStep('hero');
         resetState();
       }
@@ -129,8 +135,7 @@ export default function App() {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    resetState();
-    setStep('hero');
+    // State reset and step change handled in onAuthStateChange
   };
 
   // Fresh Start Logic
