@@ -1,5 +1,3 @@
-import { createClient } from '@supabase/supabase-js';
-
 export const config = {
   matcher: '/gallery/:path*',
   runtime: 'edge',
@@ -10,31 +8,36 @@ export default async function middleware(request: Request) {
   const segments = url.pathname.split('/');
   const id = segments[segments.length - 1];
 
-  if (!id) return fetch(request);
+  if (!id || id.includes('.')) {
+    return fetch(request);
+  }
 
   try {
-    // 【规范做法】从环境变量中读取 Key
-    // ! 号是告诉 TypeScript "我保证这肯定有值，别报错"
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-    // 1. 获取 Supabase 数据
-    const supabase = createClient(supabaseUrl, supabaseKey);
-    const { data: image } = await supabase
-      .from('saved_images')
-      .select('image_url, caption')
-      .eq('id', id)
-      .single();
+    const apiUrl = `${supabaseUrl}/rest/v1/saved_images?id=eq.${id}&select=image_url,caption`;
+    
+    const dbResponse = await fetch(apiUrl, {
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!dbResponse.ok) return fetch(request);
+
+    const data = await dbResponse.json();
+    const image = data && data.length > 0 ? data[0] : null;
 
     if (!image) return fetch(request);
 
-    // 2. 获取原始 HTML
     const indexResponse = await fetch(new URL('/index.html', request.url));
     const html = await indexResponse.text();
 
-    // 3. 准备 Meta 标签
-    const safeTitle = (image.caption || 'StoryBoard AI').replace(/"/g, '&quot;');
-    const description = `Check out this comic panel: "${safeTitle}"`;
+    const safeTitle = (image.caption || 'StoryBoard AI').replace(/"/g, '&quot;').substring(0, 50);
+    const description = `Check out this comic panel: "${safeTitle}..."`;
     const imageUrl = image.image_url;
 
     const newMetaTags = `
@@ -42,14 +45,29 @@ export default async function middleware(request: Request) {
       <meta property="og:title" content="${safeTitle}" />
       <meta property="og:description" content="${description}" />
       <meta property="og:image" content="${imageUrl}" />
+      <meta property="og:image:width" content="1024" />
+      <meta property="og:image:height" content="1024" />
+      
       <meta name="twitter:card" content="summary_large_image" />
       <meta name="twitter:title" content="${safeTitle}" />
       <meta name="twitter:description" content="${description}" />
       <meta name="twitter:image" content="${imageUrl}" />
     `;
 
-    // 4. 暴力插入到 </head> 之前
-    const modifiedHtml = html.replace('</head>', `${newMetaTags}</head>`);
+    // 【关键修改】在插入新标签前，先用正则把旧的标签“洗掉”
+    // 这样能确保 HTML 里只有一套正确的标签，防止 Twitter 抓错
+    let cleanedHtml = html
+      .replace(/<title>.*?<\/title>/g, '')
+      .replace(/<meta property="og:title".*?>/g, '')
+      .replace(/<meta property="og:description".*?>/g, '')
+      .replace(/<meta property="og:image".*?>/g, '')
+      .replace(/<meta name="twitter:title".*?>/g, '')
+      .replace(/<meta name="twitter:description".*?>/g, '')
+      .replace(/<meta name="twitter:image".*?>/g, '')
+      .replace(/<meta name="twitter:card".*?>/g, '');
+
+    // 将清洗后的 HTML 插入新标签
+    const modifiedHtml = cleanedHtml.replace('</head>', `${newMetaTags}</head>`);
 
     return new Response(modifiedHtml, {
       status: 200,
