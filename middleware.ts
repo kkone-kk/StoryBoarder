@@ -1,30 +1,30 @@
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase Client for Edge Runtime
-// Using the anon key is safe here as we only need read access
+export const config = {
+  // Only run this middleware on gallery routes
+  matcher: '/gallery/:path*',
+  runtime: 'edge',
+};
+
+// Initialize Supabase Client
 const supabaseUrl = 'https://kpbubonhlbmqucmijmfr.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtwYnVib25obGJtcXVjbWlqbWZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUwNjk0MDksImV4cCI6MjA4MDY0NTQwOX0.YBSmUGor5OUYBcWVNNj5gH3dHj6ZHAcWTLeS1Eb5Do0';
 
-export async function middleware(request: NextRequest) {
-  const url = request.nextUrl;
-  
-  // Only run logic for gallery paths
-  if (!url.pathname.startsWith('/gallery/')) {
-    return NextResponse.next();
-  }
+export default async function middleware(request: Request) {
+  const url = new URL(request.url);
 
   // Extract ID from /gallery/[id]
-  const id = url.pathname.split('/').pop();
-  
+  // url.pathname example: "/gallery/123-abc-456"
+  const segments = url.pathname.split('/');
+  const id = segments[segments.length - 1];
+
+  // If no ID found, forward the request as-is
   if (!id) {
-    return NextResponse.next();
+    return fetch(request);
   }
 
   try {
     // 1. Fetch image data from Supabase
-    // We create a new client instance here to ensure it works in the Edge environment
     const supabase = createClient(supabaseUrl, supabaseKey);
     const { data: image } = await supabase
       .from('saved_images')
@@ -32,52 +32,57 @@ export async function middleware(request: NextRequest) {
       .eq('id', id)
       .single();
 
-    // If image not found, just serve the default index.html (client-side app will handle 404)
+    // If image not found in DB, forward to standard app (which handles 404s)
     if (!image) {
-       return NextResponse.next();
+      return fetch(request);
     }
 
-    // 2. Fetch the raw index.html
-    // We fetch the root URL of the deployment to get the static HTML file
-    const indexUrl = new URL('/', request.url);
-    const indexResponse = await fetch(indexUrl);
+    // 2. Fetch the raw index.html from the origin
+    // Since this is a SPA, we need the "shell" file to inject data into.
+    // We explicitly fetch /index.html to avoid infinite recursion if we fetched request.url
+    const indexResponse = await fetch(new URL('/index.html', request.url));
     const html = await indexResponse.text();
 
     // 3. Prepare Dynamic Metadata
     const title = `StoryBoard AI: ${image.caption.length > 40 ? image.caption.substring(0, 40) + '...' : image.caption}`;
-    const description = `Check out this comic panel generated with StoryBoard AI: "${image.caption}"`;
+    // Escape quotes to prevent breaking HTML attributes
+    const safeTitle = title.replace(/"/g, '&quot;');
+    const safeCaption = image.caption.replace(/"/g, '&quot;');
+    
+    const description = `Check out this comic panel generated with StoryBoard AI: "${safeCaption}"`;
     const imageUrl = image.image_url;
 
-    // 4. Inject Metadata into HTML
-    // We replace the default tags found in index.html with our dynamic values
+    // 4. Inject Metadata into HTML string
+    // We replace the default tags present in index.html with specific data
     let modifiedHtml = html
-      // Replace Titles
-      .replace(/content="StoryBoarder AI"/g, `content="${title}"`)
-      .replace(/<title>StoryBoarder AI<\/title>/, `<title>${title}</title>`)
-      // Replace Descriptions
-      .replace(
-        /content="A high-fidelity comic and storyboard generator for product managers and researchers."/g, 
-        `content="${description}"`
-      )
-      // Replace Images (matches the default imgur link in your index.html)
-      .replace(
-        /content="https:\/\/i\.imgur\.com\/3BXBqCR\.png"/g, 
-        `content="${imageUrl}"`
-      );
+      // Replace Title
+      .replace(/<title>.*?<\/title>/, `<title>${safeTitle}</title>`)
+      // Replace Open Graph Title
+      .replace(/property="og:title" content=".*?"/, `property="og:title" content="${safeTitle}"`)
+      // Replace Twitter Title
+      .replace(/name="twitter:title" content=".*?"/, `name="twitter:title" content="${safeTitle}"`)
+      // Replace Description (Open Graph)
+      .replace(/property="og:description" content=".*?"/, `property="og:description" content="${description}"`)
+      // Replace Description (Twitter)
+      .replace(/name="twitter:description" content=".*?"/, `name="twitter:description" content="${description}"`)
+      // Replace Image (Open Graph) - Target the specific default imgur link or generic content attribute
+      .replace(/property="og:image" content=".*?"/, `property="og:image" content="${imageUrl}"`)
+      // Replace Image (Twitter)
+      .replace(/name="twitter:image" content=".*?"/, `name="twitter:image" content="${imageUrl}"`);
 
-    // 5. Return the modified HTML
-    return new NextResponse(modifiedHtml, {
-      headers: { 'Content-Type': 'text/html' },
+    // 5. Return the modified HTML response
+    return new Response(modifiedHtml, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        // prevent caching so dynamic meta tags update correctly if the image changes
+        'Cache-Control': 'no-cache, no-store, must-revalidate' 
+      },
     });
 
   } catch (error) {
     console.error('Middleware Error:', error);
-    // On error, fallback to default behavior
-    return NextResponse.next();
+    // Fallback: serve the original request if something breaks
+    return fetch(request);
   }
 }
-
-// Configure matcher to only run on gallery routes
-export const config = {
-  matcher: '/gallery/:path*',
-};
