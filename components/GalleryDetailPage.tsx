@@ -22,6 +22,39 @@ export const GalleryDetailPage: React.FC<Props> = ({ id, onNavigateHome }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // Helper to update meta tags dynamically for social previews
+  const updateMetaTags = (title: string, description: string, imageUrl: string) => {
+    document.title = title;
+
+    const setMeta = (selector: string, content: string) => {
+      let element = document.querySelector(selector);
+      if (!element) {
+        // Create element if it doesn't exist
+        element = document.createElement('meta');
+        if (selector.includes('property=')) {
+          element.setAttribute('property', selector.match(/property="([^"]+)"/)?.[1] || '');
+        } else if (selector.includes('name=')) {
+          element.setAttribute('name', selector.match(/name="([^"]+)"/)?.[1] || '');
+        }
+        document.head.appendChild(element);
+      }
+      element.setAttribute('content', content);
+    };
+
+    // Open Graph (Facebook, LinkedIn, etc.)
+    setMeta('meta[property="og:title"]', title);
+    setMeta('meta[property="og:description"]', description);
+    setMeta('meta[property="og:image"]', imageUrl);
+    setMeta('meta[property="og:url"]', window.location.href);
+    setMeta('meta[property="og:type"]', 'website');
+
+    // Twitter Card
+    setMeta('meta[name="twitter:card"]', 'summary_large_image');
+    setMeta('meta[name="twitter:title"]', title);
+    setMeta('meta[name="twitter:description"]', description);
+    setMeta('meta[name="twitter:image"]', imageUrl);
+  };
+
   useEffect(() => {
     const fetchImage = async () => {
       setLoading(true);
@@ -35,9 +68,11 @@ export const GalleryDetailPage: React.FC<Props> = ({ id, onNavigateHome }) => {
         if (error) throw error;
         setImage(data);
         
-        // Update Metadata (Client-side SEO)
         if (data) {
-           document.title = `StoryBoard AI: ${data.caption.substring(0, 30)}...`;
+           // Set dynamic metadata once data is loaded
+           const pageTitle = `StoryBoard AI: ${data.caption.length > 50 ? data.caption.substring(0, 50) + '...' : data.caption}`;
+           const pageDesc = `Check out this comic panel generated with StoryBoard AI: "${data.caption}"`;
+           updateMetaTags(pageTitle, pageDesc, data.image_url);
         }
       } catch (err: any) {
         console.error('Error fetching image:', err);
@@ -51,9 +86,10 @@ export const GalleryDetailPage: React.FC<Props> = ({ id, onNavigateHome }) => {
         fetchImage();
     }
     
-    // Cleanup title
+    // Cleanup: Reset title and meta tags when leaving the page
     return () => {
         document.title = 'StoryBoarder AI';
+        updateMetaTags('StoryBoarder AI', 'A high-fidelity comic and storyboard generator.', ''); // Reset to default or empty
     };
   }, [id]);
 
