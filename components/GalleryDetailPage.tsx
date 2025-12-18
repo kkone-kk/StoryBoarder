@@ -1,8 +1,10 @@
+
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../services/supabase';
 import { Button } from './Button';
 import { ShareBtn } from './ShareBtn';
 import { Home, Loader2, Download, Calendar, ArrowLeft } from 'lucide-react';
+import { StickyCTA } from './StickyCTA';
 
 interface Props {
   id: string;
@@ -136,9 +138,9 @@ export const GalleryDetailPage: React.FC<Props> = ({ id, onNavigateHome }) => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto animate-fade-in-up pb-20">
+    <div className="max-w-4xl mx-auto animate-fade-in-up pb-32">
       {/* Navbar for this view */}
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex justify-between items-center mb-8 px-2">
          <Button variant="ghost" onClick={onNavigateHome} className="pl-0 hover:bg-transparent text-gray-500 hover:text-gray-900">
             <ArrowLeft size={20} className="mr-2" /> Back to Home
          </Button>
@@ -152,7 +154,7 @@ export const GalleryDetailPage: React.FC<Props> = ({ id, onNavigateHome }) => {
 
       <div className="bg-white rounded-[32px] shadow-xl border border-gray-100 overflow-hidden">
         {/* Image Container */}
-        <div className="bg-gray-50 flex items-center justify-center min-h-[400px] p-4 md:p-8">
+        <div className="bg-gray-50 flex items-center justify-center min-h-[400px] p-4 md:p-12">
              <img 
                 src={image.image_url} 
                 alt={image.caption} 
@@ -162,30 +164,28 @@ export const GalleryDetailPage: React.FC<Props> = ({ id, onNavigateHome }) => {
 
         {/* Content */}
         <div className="p-8 md:p-10">
-            <div className="flex items-center gap-2 text-sm text-gray-400 font-medium mb-4 uppercase tracking-wider">
+            <div className="flex items-center gap-2 text-sm text-gray-400 font-semibold mb-4 uppercase tracking-widest">
                 <Calendar size={14} /> {formatDate(image.created_at)}
             </div>
             
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-6 leading-tight">
+            <h1 className="text-2xl md:text-4xl font-bold text-gray-900 mb-6 leading-tight">
                 {image.caption}
             </h1>
 
-            <div className="flex items-center gap-4 pt-6 border-t border-gray-100">
-                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold">
+            <div className="flex items-center gap-4 pt-8 border-t border-gray-100">
+                 <div className="w-10 h-10 rounded-full bg-black flex items-center justify-center text-white font-bold">
                     S
                  </div>
                  <div>
-                    <p className="text-sm font-bold text-gray-900">Generated with StoryBoard AI</p>
-                    <p className="text-xs text-gray-500">Create your own visual stories in seconds.</p>
-                 </div>
-                 <div className="ml-auto">
-                    <Button size="sm" variant="secondary" onClick={onNavigateHome}>
-                        Try it now
-                    </Button>
+                    <p className="text-sm font-bold text-gray-900 uppercase tracking-tight">StoryBoard AI Original</p>
+                    <p className="text-xs text-gray-500">Visual narratives for researchers and product managers.</p>
                  </div>
             </div>
         </div>
       </div>
+
+      {/* High-Contrast Floating Pill CTA */}
+      <StickyCTA onClick={onNavigateHome} />
     </div>
   );
 };
